@@ -9,7 +9,7 @@ class TicTacToeNet(nn.Module):
 
     def forward(self, x):
         x = x.view(-1, BOARD_ROWS * BOARD_COLS)
-        x = torch.sigmoid(self.fc(x))
+        x = torch.sigmoid(self.fc(x))  # Keep the sigmoid activation
         return x
 
 # Function to check if a player has won
