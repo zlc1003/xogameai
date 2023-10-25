@@ -1,0 +1,137 @@
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import tqdm
+
+class TicTacToeNet(nn.Module):
+    def __init__(self):
+        super(TicTacToeNet, self).__init__()
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
+        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1)
+        self.conv4 = nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1)
+        self.fc = nn.Linear(256 * 3 * 3, 1)  # Output layer for regression
+
+    def forward(self, x):
+        x = x.view(-1, 1, 3, 3)  # Add channel dimension for convolution
+        x = torch.relu(self.conv1(x))
+        x = torch.relu(self.conv2(x))
+        x = torch.relu(self.conv3(x))
+        x = torch.relu(self.conv4(x))
+        x = x.view(x.size(0), -1)  # Flatten for fully connected layer
+        x = self.fc(x)
+        return x
+
+# Function to get the best move from the AI
+# Normalization parameters
+mean = 0.5
+std = 0.5
+import random
+def empty_positions(board):
+    positions = []
+    for i in range(3):
+        for j in range(3):
+            if board[i][j] == 0:
+                positions.append((i, j))
+    return positions
+
+# Function to get the best move from the AI
+def get_best_move(board, model, epsilon=0.1):
+    if random.random() < epsilon:
+        # Exploration: Choose a random move
+        row, col = random.choice(empty_positions(board))
+    else:
+        # Exploitation: Choose the best predicted move
+        row, col = get_best_move(board, model)
+    return row, col
+
+
+
+
+# Function to check for NaN or infinite values in the board
+def check_valid_board(board):
+    if torch.isnan(board).any() or torch.isinf(board).any():
+        return False
+    return True
+
+
+# Function to play a game between two AI players
+def play_game(model1, model2):
+    board = torch.zeros(3, 3)  # Initialize an empty 3x3 board
+    while True:
+        # Player 1's turn
+        row, col = get_best_move(board, model1)
+        if board[row][col] != 0:
+            return -1  # Player 2 wins
+        board[row][col] = 1
+        if check_winner(board, 1):
+            return 1  # Player 1 wins
+        if not (board == 0).any():
+            return 0  # Draw
+        
+        # Player 2's turn
+        row, col = get_best_move(board, model2)
+        if board[row][col] != 0:
+            return 1  # Player 1 wins
+        board[row][col] = -1
+        if check_winner(board, -1):
+            return -1  # Player 2 wins
+        if not (board == 0).any():
+            return 0  # Draw
+
+# Function to check for a winner
+def check_winner(board, player):
+    # Check rows, columns, and diagonals
+    for i in range(3):
+        if all(board[i][j] == player for j in range(3)) or \
+           all(board[j][i] == player for j in range(3)) or \
+           all(board[j][j] == player for j in range(3)) or \
+           all(board[j][2-j] == player for j in range(3)):
+            return True
+    return False
+board = torch.zeros(3, 3)
+# Training the models by having them play against each other
+model1 = TicTacToeNet()
+model2 = TicTacToeNet()
+optimizer1 = optim.Adam(model1.parameters(), lr=0.0001)  # Adjust learning rate
+optimizer2 = optim.Adam(model2.parameters(), lr=0.0001)  # Adjust learning rate
+# criterion1 = nn.MSELoss()  # Mean Squared Error loss for model1
+# criterion2 = nn.MSELoss()  # Mean Squared Error loss for model2
+
+
+num_epochs = 100000
+max_grad_norm = 1.0  # Set your desired maximum gradient norm value
+
+for epoch in tqdm.tqdm(range(num_epochs)):
+    # Play a game and get the winner
+    winner = play_game(model1, model2)
+    
+    # Check if the game board has NaN or infinite values
+    if not check_valid_board(board):
+        print("Invalid game board encountered during self-play!")
+        continue
+    
+    # Update model1's weights if it wins
+    if winner == 1:
+        optimizer1.zero_grad()
+        outputs1 = model1(board.view(1, 1, 3, 3).float())
+        torch.nn.utils.clip_grad_norm_(model1.parameters(), max_norm=max_grad_norm)  # Clip gradients
+        loss1 = outputs1.mean()  # You might want to define an appropriate loss function
+        loss1.backward()
+        optimizer1.step()
+
+    # Update model2's weights if it wins
+    elif winner == -1:
+        optimizer2.zero_grad()
+        outputs2 = model2(board.view(1, 1, 3, 3).float())
+        torch.nn.utils.clip_grad_norm_(model2.parameters(), max_norm=max_grad_norm)  # Clip gradients
+        loss2 = -outputs2.mean()  # You might want to define an appropriate loss function
+        loss2.backward()
+        optimizer2.step()
+
+print('Training finished!')
+# Save model1
+torch.save(model1.state_dict(), 'model1.pth')
+
+# Save model2
+torch.save(model2.state_dict(), 'model2.pth')
