@@ -316,7 +316,7 @@ def train_model(model, done_train_, num_epochs=10000):
     plt.ylabel('Loss')
     plt.grid(True)
     plt.savefig('graph_loss.png')
-    plt.show()
+    # plt.show()
 
 def train_parallel(model, num_epochs, process_number,shared_var):
     mod=model[0]
@@ -327,7 +327,7 @@ def train_parallel(model, num_epochs, process_number,shared_var):
 
 def update_prog(shared_var):
     prog=ProgBar(total=NUM_EPOCHS,desc="Training", position=0)
-    while True:
+    while shared_var.value != NUM_EPOCHS:
         prog.update_to(shared_var.value)
         time.sleep(0.3)
 if __name__ == "__main__":
@@ -348,4 +348,4 @@ if __name__ == "__main__":
         process.join()
     print("All processes finished training!")
     print("saving")
-    torch.save(model.state_dict(), 'model.pth')
+    torch.save(model[0].state_dict(), 'model.pth')
