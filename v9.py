@@ -273,9 +273,9 @@ if __name__ == "__main__":
 
     st = State(p1, p2)
     print("training...")
-    st.play(1000000)
-    p1.savePolicy("policy_p1")
-    p2.savePolicy("policy_p2")
+    st.play(100000)
+    p1.savePolicy("policy_p1.pickle")
+    p2.savePolicy("policy_p2.pickle")
     # play with human
     p1 = Player("computer", exp_rate=0)
     p1.loadPolicy("policy_p1")
