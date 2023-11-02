@@ -2,6 +2,7 @@ import torch
 import numpy as np
 from rich import traceback
 traceback.install()
+
 BOARD_ROWS = 3
 BOARD_COLS = 3
 
@@ -57,8 +58,23 @@ class TicTacToeGame:
         available_positions = [(r, c) for r in range(BOARD_ROWS) for c in range(BOARD_COLS) if self.board[r][c] == self.empty_symbol]
         if available_positions:
             current_board = torch.tensor(self.board).float().view(1, -1)
-            action = self.model.chooseAction(available_positions, current_board, self.computer_symbol)
+            action = self.computer_choose_action(available_positions, current_board)
             return action
+
+    def computer_choose_action(self, positions, current_board):
+        available_positions = [(r, c) for r, c in positions]
+        current_board = current_board.view(-1, BOARD_ROWS * BOARD_COLS)
+        value_max = -999
+        action = None
+        for p in positions:
+            next_board = current_board.clone()
+            next_board[0, p[0] * BOARD_COLS + p[1]] = self.computer_symbol
+            next_boardHash = str(next_board.view(BOARD_ROWS * BOARD_COLS).int().tolist())
+            value = 0 if self.states_value.get(next_boardHash) is None else self.states_value.get(next_boardHash)
+            if value >= value_max:
+                value_max = value
+                action = p
+        return action
 
     def play_game(self):
         self.print_board()
