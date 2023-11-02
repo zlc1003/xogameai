@@ -2,14 +2,14 @@ import torch
 import numpy as np
 from rich import traceback
 traceback.install()
-
+import torch.nn as nn
 BOARD_ROWS = 3
 BOARD_COLS = 3
 
-class TicTacToeNet(torch.nn.Module):
+class TicTacToeNet(nn.Module):
     def __init__(self):
-        super(TicTacToeNet, self).__init()
-        self.fc = torch.nn.Linear(BOARD_ROWS * BOARD_COLS, 1)
+        super(TicTacToeNet, self).__init__()
+        self.fc = nn.Linear(BOARD_ROWS * BOARD_COLS, 1)
 
     def forward(self, x):
         x = x.view(-1, BOARD_ROWS * BOARD_COLS)
