@@ -1,5 +1,5 @@
-NUM_EPOCHS = 10000
-NUM_PROCESSES = 1
+NUM_EPOCHS = (100000 // 8) * 8
+NUM_PROCESSES = 8
 BOARD_ROWS = 3
 BOARD_COLS = 3
 max_norm=1
@@ -12,7 +12,6 @@ import matplotlib.pyplot as plt
 from rich import traceback,inspect
 import multiprocessing,time
 import multiprocessing.managers
-import ctypes
 
 class ProgBar(tqdm.tqdm):
     def update_to(self, n):
