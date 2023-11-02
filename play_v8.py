@@ -1,7 +1,9 @@
 import torch
+from rich import traceback
 import numpy as np
 BOARD_ROWS = 3
 BOARD_COLS = 3
+traceback.install()
 max_norm=1
 import torch
 import torch.nn as nn
