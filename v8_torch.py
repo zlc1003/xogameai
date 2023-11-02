@@ -8,7 +8,7 @@ BOARD_COLS = 3
 
 class TicTacToeNet(torch.nn.Module):
     def __init__(self):
-        super(TicTacToeNet, self).__init__()
+        super(TicTacToeNet, self).__init()
         self.fc = torch.nn.Linear(BOARD_ROWS * BOARD_COLS, 1)
 
     def forward(self, x):
@@ -25,6 +25,7 @@ class TicTacToeGame:
         self.model = TicTacToeNet()
         self.model.load_state_dict(torch.load('model.pth'))
         self.model.eval()
+        self.states_value = {}  # Dictionary to store state values
 
     def print_board(self):
         symbols = [' ', 'X', 'O']
