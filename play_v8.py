@@ -1,277 +1,125 @@
 import torch
-from rich import traceback
 import numpy as np
+from rich import traceback
+traceback.install()
+import torch.nn as nn
 BOARD_ROWS = 3
 BOARD_COLS = 3
-traceback.install()
-max_norm=1
-import torch
-import torch.nn as nn
-import tqdm
-class HumanPlayer:
-    def __init__(self, name):
-        self.name = name
 
-    def chooseAction(self, positions):
-        while True:
-            try:
-                action_index = int(input("Enter the index of the position you want to go: "))
-                if action_index in range(len(positions)):
-                    return positions[action_index]
-                else:
-                    print("Invalid index. Please choose a valid position.")
-            except ValueError:
-                print("Invalid input. Please enter a number.")
 
-    def addState(self, state):
-        pass
-
-    def feedReward(self, reward):
-        pass
-
-    def reset(self):
-        pass
 class TicTacToeNet(nn.Module):
     def __init__(self):
         super(TicTacToeNet, self).__init__()
-        self.fc = nn.Linear(BOARD_ROWS * BOARD_COLS, 1)
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
+        self.fc = nn.Linear(64 * BOARD_ROWS * BOARD_COLS, 1)
 
     def forward(self, x):
-        x = x.view(-1, BOARD_ROWS * BOARD_COLS)
+        x = x.view(-1, 1, BOARD_ROWS, BOARD_COLS)  # Add a channel dimension for CNN
+        x = torch.relu(self.conv1(x))
+        x = torch.relu(self.conv2(x))
+        x = x.view(-1, 64 * BOARD_ROWS * BOARD_COLS)
         x = torch.sigmoid(self.fc(x))  # Keep the sigmoid activation
         return x
 
-class State:
-    def __init__(self, p1, p2):
+
+class TicTacToeGame:
+    def __init__(self):
         self.board = np.zeros((BOARD_ROWS, BOARD_COLS))
-        self.p1 = p1
-        self.p2 = p2
-        self.isEnd = False
-        self.playerSymbol = 1
+        self.player_symbol = 1  # You are "X"
+        self.computer_symbol = -1  # The trained model is "O"
+        self.empty_symbol = 0
+        self.model = TicTacToeNet()
+        self.model.load_state_dict(torch.load('model.pth'))
+        self.model.eval()
+        self.states_value = {}  # Dictionary to store state values
 
-    def getHash(self):
-        return str(self.board.reshape(BOARD_COLS * BOARD_ROWS))
+    def print_board(self):
+        symbols = [' ', 'X', 'O']
+        for r in range(BOARD_ROWS):
+            row = [symbols[int(self.board[r][c])] for c in range(BOARD_COLS)]
+            print("|".join(row))
+            if r < BOARD_ROWS - 1:
+                print("-" * (BOARD_COLS * 2 - 1))
 
-    def winner(self):
-        # row
-        for i in range(BOARD_ROWS):
-            if sum(self.board[i, :]) == 3:
-                self.isEnd = True
-                return 1
-            if sum(self.board[i, :]) == -3:
-                self.isEnd = True
-                return -1
-        # col
-        for i in range(BOARD_COLS):
-            if sum(self.board[:, i]) == 3:
-                self.isEnd = True
-                return 1
-            if sum(self.board[:, i]) == -3:
-                self.isEnd = True
-                return -1
-        # diagonal
-        diag_sum1 = sum([self.board[i, i] for i in range(BOARD_COLS)])
-        diag_sum2 = sum([self.board[i, BOARD_COLS - i - 1] for i in range(BOARD_COLS)])
-        diag_sum = max(abs(diag_sum1), abs(diag_sum2))
-        if diag_sum == 3:
-            self.isEnd = True
-            if diag_sum1 == 3 or diag_sum2 == 3:
-                return 1
-            else:
-                return -1
+    def is_valid_move(self, move):
+        r, c = move
+        return 0 <= r < BOARD_ROWS and 0 <= c < BOARD_COLS and self.board[r][c] == self.empty_symbol
 
-        # tie
-        # no available positions
-        if len(self.availablePositions()) == 0:
-            self.isEnd = True
-            return 0
-        # not end
-        self.isEnd = False
-        return None
+    def make_move(self, move, symbol):
+        r, c = move
+        self.board[r][c] = symbol
 
-    def availablePositions(self):
-        positions = []
-        for i in range(BOARD_ROWS):
-            for j in range(BOARD_COLS):
-                if self.board[i, j] == 0:
-                    positions.append((i, j))  # need to be tuple
-        return positions
-
-    def updateState(self, position):
-        self.board[position] = self.playerSymbol
-        self.playerSymbol = -1 if self.playerSymbol == 1 else 1
-
-    def giveReward(self):
-        result = self.winner()
-        # backpropagate reward
-        if result == 1:
-            self.p1.feedReward(1)
-            self.p2.feedReward(0)
-        elif result == -1:
-            self.p1.feedReward(0)
-            self.p2.feedReward(1)
-        else:
-            self.p1.feedReward(0.1)
-            self.p2.feedReward(0.5)
-
-    def reset(self):
-        self.board = np.zeros((BOARD_ROWS, BOARD_COLS))
-        self.boardHash = None
-        self.isEnd = False
-        self.playerSymbol = 1
-
-    def play(self, rounds=100):
-        for i in tqdm.tqdm(range(rounds)):
-            # if i % 1000 == 0:
-            #     print("Rounds {}".format(i))
-            while not self.isEnd:
-                # Player 1
-                positions = self.availablePositions()
-                p1_action = self.p1.chooseAction(positions, self.board, self.playerSymbol)
-                # take action and upate board state
-                self.updateState(p1_action)
-                board_hash = self.getHash()
-                self.p1.addState(board_hash)
-                # check board status if it is end
-
-                win = self.winner()
-                if win is not None:
-                    # self.showBoard()
-                    # ended with p1 either win or draw
-                    self.giveReward()
-                    self.p1.reset()
-                    self.p2.reset()
-                    self.reset()
-                    break
+    def player_turn(self):
+        while True:
+            try:
+                move = input("Enter your move (row and column, e.g., '1 2'): ").split()
+                move = (int(move[0]), int(move[1]))
+                if self.is_valid_move(move):
+                    return move
                 else:
-                    # Player 2
-                    positions = self.availablePositions()
-                    curr_board = torch.tensor(self.board).float()
-                    p2_action = self.p2.chooseAction(positions, curr_board, self.playerSymbol)
-                    self.updateState(p2_action)
-                    board_hash = self.getHash()
-                    self.p2.addState(board_hash)
+                    print("Invalid move. Try again.")
+            except (ValueError, IndexError):
+                print("Invalid input. Please enter row and column values.")
 
-                    win = self.winner()
-                    if win is not None:
-                        self.giveReward()
-                        self.p1.reset()
-                        self.p2.reset()
-                        self.reset()
-                        break
+    def computer_turn(self):
+        available_positions = [(r, c) for r in range(BOARD_ROWS) for c in range(BOARD_COLS) if self.board[r][c] == self.empty_symbol]
+        if available_positions:
+            current_board = torch.tensor(self.board).float().view(1, -1)
+            action = self.computer_choose_action(available_positions, current_board)
+            return action
 
-class Player:
-    def __init__(self, name, exp_rate=0.3):
-        self.name = name
-        self.rewards = []
-        self.states = []
-        self.lr = 0.2
-        self.exp_rate = exp_rate
-        self.decay_gamma = 0.9
-        self.states_value = {}
-
-    def getHash(self, board):
-        boardHash = str(board.reshape(BOARD_COLS * BOARD_ROWS))
-        return boardHash
-
-
-    # append a hash state
-    def addState(self, state):
-        self.states.append(state)  # add states to the list
-
-    # at the end of game, backpropagate and update states value
-    def feedReward(self, reward):
-        # Normalize rewards
-        rewards = torch.tensor(self.rewards).float()
-        rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-8)
-
-        # Create a copy of rewards before iterating through it
-        rewards_copy = rewards.clone()
-
-        for st in reversed(self.states):
-            if self.states_value.get(st) is None:
-                self.states_value[st] = 0
-            reward_value = rewards_copy.mean().item()  # Calculate the mean of rewards and obtain a scalar value
-            self.states_value[st] += self.lr * (self.decay_gamma * reward_value - self.states_value[st])
-
-            # Remove the last reward value from the list
-            rewards_copy = rewards_copy[:-1]
-
-        # Clear the rewards list after updating states values
-        self.rewards = []
-
-
-
-    def reset(self):
-        self.states = []
-
-    def chooseAction(self, positions, current_board, symbol):
-        if np.random.uniform(0, 1) <= self.exp_rate:
-            # take random action
-            idx = np.random.choice(len(positions))
-            action = positions[idx]
-        else:
-            value_max = -999
-            for p in positions:
-                next_board = current_board.clone()
-                next_board[0, p] = symbol  # modify the cloned tensor
-                next_boardHash = self.getHash(next_board)
-                value = 0 if self.states_value.get(next_boardHash) is None else self.states_value.get(next_boardHash)
-                if value >= value_max:
-                    value_max = value
-                    action = p
+    def computer_choose_action(self, positions, current_board):
+        available_positions = [(r, c) for r, c in positions]
+        current_board = current_board.view(-1, BOARD_ROWS * BOARD_COLS)
+        value_max = -999
+        action = None
+        for p in positions:
+            next_board = current_board.clone()
+            next_board[0, p[0] * BOARD_COLS + p[1]] = self.computer_symbol
+            next_boardHash = str(next_board.view(BOARD_ROWS * BOARD_COLS).int().tolist())
+            value = 0 if self.states_value.get(next_boardHash) is None else self.states_value.get(next_boardHash)
+            if value >= value_max:
+                value_max = value
+                action = p
         return action
+
+    def play_game(self):
+        self.print_board()
+        while True:
+            player_move = self.player_turn()
+            self.make_move(player_move, self.player_symbol)
+            self.print_board()
+            if self.check_winner(self.player_symbol):
+                print("You win! Congratulations!")
+                break
+            if self.check_draw():
+                print("It's a draw!")
+                break
+
+            computer_move = self.computer_turn()
+            if computer_move:
+                self.make_move(computer_move, self.computer_symbol)
+                self.print_board()
+                if self.check_winner(self.computer_symbol):
+                    print("Computer wins!")
+                    break
+                if self.check_draw():
+                    print("It's a draw!")
+                    break
+
+    def check_winner(self, symbol):
+        for i in range(BOARD_ROWS):
+            if all(self.board[i, :] == symbol) or all(self.board[:, i] == symbol):
+                return True
+        if all(np.diag(self.board) == symbol) or all(np.diag(np.fliplr(self.board)) == symbol):
+            return True
+        return False
+
+    def check_draw(self):
+        return np.all(self.board != self.empty_symbol)
+
 if __name__ == "__main__":
-    # Load the saved model and create a human player
-    model = TicTacToeNet()
-    model.load_state_dict(torch.load('model.pth'))
-    model.eval()  # Set the model to evaluation mode
-    human_player = HumanPlayer("Human")
-
-    # Game loop
-    while True:
-        st = State(Player("AI1"), Player("AI2"))  # Provide names for players
-
-        # Human player's turn
-        while not st.isEnd and st.playerSymbol == 1:
-            positions = st.availablePositions()
-            human_action = human_player.chooseAction(positions)
-            st.updateState(human_action)
-            board_hash = st.getHash()
-            human_player.addState(board_hash)
-
-        # AI player's turn
-        while not st.isEnd and st.playerSymbol == -1:
-            positions = st.availablePositions()
-            curr_board = torch.tensor(st.board).float().view(1, -1)
-            action_prob = model(curr_board)
-            print("Action Probabilities:", action_prob)
-            print("Available Positions:", positions)
-            valid_moves = [positions[i] for i in range(len(positions)) if st.board[positions[i]] == 0]
-            print("Valid Moves:", valid_moves)
-            action_probs_valid = action_prob[0, [positions.index(move) for move in valid_moves]]
-            action_index = torch.argmax(action_probs_valid).item()
-            ai_action = valid_moves[action_index]
-            st.updateState(ai_action)
-            board_hash = st.getHash()
-            # Assuming it's Player 2's turn, update the state for Player 2 (modify accordingly if needed)
-            st.p2.addState(board_hash)
-
-
-        # Check game result and update rewards (modify this part based on your reward mechanism)
-        result = st.winner()
-        if result == 1:
-            human_player.feedReward(1)
-        elif result == -1:
-            human_player.feedReward(-1)
-        else:
-            human_player.feedReward(0)
-
-        # Reset players and board for the next game
-        human_player.reset()
-        st.reset()
-
-        # Ask if the user wants to play again
-        play_again = input("Play again? (yes/no): ")
-        if play_again.lower() != "yes":
-            break
+    game = TicTacToeGame()
+    print("Welcome to Tic-Tac-Toe!")
+    game.play_game()
