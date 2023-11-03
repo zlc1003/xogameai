@@ -215,23 +215,55 @@ class Player:
 
     def reset(self):
         self.states = []
-
+    
     def chooseAction(self, positions, current_board, symbol):
-        if np.random.uniform(0, 1) <= self.exp_rate:
-            # take random action
-            idx = np.random.choice(len(positions))
-            action = positions[idx]
+        if symbol == 1:
+            opponent_symbol = -1
         else:
-            value_max = -999
-            for p in positions:
-                next_board = current_board.clone()
-                next_board[0, p] = symbol  # modify the cloned tensor
-                next_boardHash = self.getHash(next_board)
-                value = 0 if self.states_value.get(next_boardHash) is None else self.states_value.get(next_boardHash)
-                if value >= value_max:
-                    value_max = value
-                    action = p
-        return action
+            opponent_symbol = 1
+
+        best_score = float("-inf")
+        best_action = None
+        for position in positions:
+            row, col = position
+            new_board = current_board.copy()
+            new_board[row][col] = symbol
+            score = self.minimax(new_board, 0, False, opponent_symbol, float("-inf"), float("inf"))
+            if score > best_score:
+                best_score = score
+                best_action = position
+        return best_action
+
+    def minimax(self, board, depth, maximizing_player, symbol, alpha, beta):
+        terminal = State.isTerminal(board)
+        if terminal is not None:
+            if terminal == 1:
+                return 1
+            elif terminal == -1:
+                return -1
+            else:
+                return 0
+
+        if maximizing_player:
+            max_eval = float("-inf")
+            for move in State.availablePositions(board):
+                new_board = State.makeMove(board, move, symbol)
+                eval = self.minimax(new_board, depth + 1, False, symbol, alpha, beta)
+                max_eval = max(max_eval, eval)
+                alpha = max(alpha, eval)
+                if beta <= alpha:
+                    break  # Beta cut-off
+            return max_eval
+        else:
+            min_eval = float("inf")
+            for move in State.availablePositions(board):
+                new_board = State.makeMove(board, move, -symbol)
+                eval = self.minimax(new_board, depth + 1, True, symbol, alpha, beta)
+                min_eval = min(min_eval, eval)
+                beta = min(beta, eval)
+                if beta <= alpha:
+                    break  # Alpha cut-off
+            return min_eval
 
 def train_model(model, done_train_, num_epochs=10000):
     traceback.install()
