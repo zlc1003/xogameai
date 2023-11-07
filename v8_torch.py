@@ -1,15 +1,25 @@
-NUM_EPOCHS = (100000 // 8) * 8
+##################
+
+
+NUM_EPOCHS = 100000 
 NUM_PROCESSES = 8
+
+
+##################
+
+
 BOARD_ROWS = 3
 BOARD_COLS = 3
+NUM_EPOCHS = (NUM_EPOCHS // NUM_PROCESSES) * NUM_PROCESSES
 max_norm=1
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import tqdm
+from rich import traceback
 import matplotlib.pyplot as plt
-from rich import traceback,inspect
 import multiprocessing,time
 import multiprocessing.managers
 
@@ -63,6 +73,41 @@ class State:
     def getHash(self):
         return str(self.board.reshape(BOARD_COLS * BOARD_ROWS))
 
+    def isTerminal(board):
+        print("Board shape:", board.shape)  # Debug print
+        # Reshape the input board into a 2D array if it's 1D
+        if board.ndim == 1:
+            board = board.view(BOARD_ROWS, BOARD_COLS)
+
+        print("Reshaped board shape:", board.shape)  # Debug print
+
+        # Check rows, columns, and diagonals for a win
+        for i in range(BOARD_ROWS):
+            if torch.all(board[i, :] == 1):  # Check if player 1 (X) wins in a row
+                return 1
+            if torch.all(board[i, :] == -1):  # Check if player 2 (O) wins in a row
+                return -1
+
+        for i in range(BOARD_COLS):
+            if torch.all(board[:, i] == 1):  # Check if player 1 (X) wins in a column
+                return 1
+            if torch.all(board[:, i] == -1):  # Check if player 2 (O) wins in a column
+                return -1
+
+        # Check diagonals
+        if torch.all(torch.diagonal(board) == 1) or torch.all(torch.diagonal(torch.flipud(board)) == 1):
+            return 1
+        if torch.all(torch.diagonal(board) == -1) or torch.all(torch.diagonal(torch.flipud(board)) == -1):
+            return -1
+
+        # Check for a draw
+        if torch.all(board != 0):  # All cells are filled, and no player has won
+            return 0
+
+        # Game is not over yet
+        return None
+
+    
     def winner(self):
         # row
         for i in range(BOARD_ROWS):
@@ -100,13 +145,21 @@ class State:
         self.isEnd = False
         return None
 
-    def availablePositions(self):
+    @staticmethod
+    def availablePositions(board):
         positions = []
         for i in range(BOARD_ROWS):
             for j in range(BOARD_COLS):
-                if self.board[i, j] == 0:
+                if board[i][j].item() == 0:
                     positions.append((i, j))  # need to be tuple
         return positions
+
+    @staticmethod
+    def makeMove(board, position, symbol):
+        row, col = position
+        new_board = board.clone()
+        new_board[row][col] = symbol
+        return new_board
 
     def updateState(self, position):
         self.board[position] = self.playerSymbol
@@ -226,7 +279,7 @@ class Player:
         best_action = None
         for position in positions:
             row, col = position
-            new_board = current_board.copy()
+            new_board = current_board.clone().view(BOARD_ROWS, BOARD_COLS)  # Reshape to 3x3
             new_board[row][col] = symbol
             score = self.minimax(new_board, 0, False, opponent_symbol, float("-inf"), float("inf"))
             if score > best_score:
@@ -266,6 +319,7 @@ class Player:
             return min_eval
 
 def train_model(model, done_train_, num_epochs=10000):
+    from rich import traceback
     traceback.install()
     optimizer = optim.Adam(model.parameters(), lr=0.0001)  # Experiment with different learning rates
     losses = []
@@ -291,7 +345,7 @@ def train_model(model, done_train_, num_epochs=10000):
                 break
             else:
                 positions = st.availablePositions()
-                curr_board = torch.tensor(st.board).float().view(1, -1)
+                curr_board = torch.tensor(st.board).float().view(BOARD_ROWS, BOARD_COLS)
                 action = p2.chooseAction(positions, curr_board, st.playerSymbol)
                 st.updateState(action)
                 board_hash = st.getHash()
@@ -355,6 +409,7 @@ def train_model(model, done_train_, num_epochs=10000):
     # plt.show()
 
 def train_parallel(model, num_epochs, process_number,shared_var):
+    from rich import traceback
     mod=model[0]
     # print(f"Process {process_number} started training...")
     traceback.install()
@@ -366,6 +421,7 @@ def update_prog(shared_var):
     while shared_var.value != NUM_EPOCHS:
         prog.update_to(shared_var.value)
         time.sleep(0.3)
+
 if __name__ == "__main__":
     traceback.install()
     # Number of parallel processes
@@ -374,10 +430,11 @@ if __name__ == "__main__":
     manager = multiprocessing.Manager()
     model = manager.list([TicTacToeNet()])
     # inspect(model,all=True)
-    for i in range(NUM_PROCESSES):
-        process = multiprocessing.Process(target=train_parallel, args=(model, NUM_EPOCHS // NUM_PROCESSES, i,shared_var))
-        processes.append(process)
-        process.start()
+    # for i in range(NUM_PROCESSES):
+    #     process = multiprocessing.Process(target=train_parallel, args=(model, NUM_EPOCHS // NUM_PROCESSES, i,shared_var))
+    #     processes.append(process)
+    #     process.start()
+    train_parallel(model, NUM_EPOCHS, 0,shared_var)
     # train_parallel(model, NUM_EPOCHS // NUM_PROCESSES, 0,shared_var)
     multiprocessing.Process(target=update_prog,args=(shared_var,)).start()
     for process in processes:
